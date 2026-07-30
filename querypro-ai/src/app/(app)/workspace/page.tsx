@@ -11,6 +11,7 @@ import { ChatPanel } from "@/components/chat/ChatPanel";
 import { SqlWorkspaceEditor } from "@/components/sql/SqlWorkspaceEditor";
 import { ResultsConsole } from "@/components/sql/ResultsConsole";
 import { useSqlStore } from "@/lib/useSqlStore";
+import { useToast } from "@/components/ui/Toast";
 import { LIVE_SQL_SNIPPET } from "@/lib/mock-data";
 import { DRAFT_SQL_STORAGE_KEY } from "@/lib/utils";
 import type { SchemaTable } from "@/lib/types";
@@ -20,8 +21,10 @@ export default function WorkspacePage() {
   const [chatVisible, setChatVisible] = useState(false);
   const [selectedTable, setSelectedTable] = useState<SchemaTable>(getDefaultTable());
   const [sql, setSql] = useState(LIVE_SQL_SNIPPET);
+  const [saving, setSaving] = useState(false);
 
   const { isExecuting, queryResult, initDb, executeSql } = useSqlStore();
+  const { showToast } = useToast();
 
   // Boot PGlite on mount (no-op if already running from another page).
   useEffect(() => {
@@ -45,6 +48,30 @@ export default function WorkspacePage() {
     const queryToRun = nextSql ?? sql;
     if (nextSql) setSql(nextSql);
     await executeSql(queryToRun);
+  }
+
+  async function handleSaveWorkspace() {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/workspace/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: selectedTable.name ? `${selectedTable.name} Workspace` : "Untitled Workspace",
+          data: { sql, selectedTableId: selectedTable.id },
+        }),
+      });
+      const payload = await res.json();
+      if (res.ok && payload.success) {
+        showToast("Workspace saved successfully to database!", "success");
+      } else {
+        throw new Error(payload.error || "Failed to save workspace");
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to save workspace", "error");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -94,6 +121,8 @@ export default function WorkspacePage() {
               value={sql}
               onChange={setSql}
               onRun={() => runQuery()}
+              onSave={handleSaveWorkspace}
+              saving={saving}
               running={isExecuting}
             />
 

@@ -1,8 +1,6 @@
 import { NextRequest } from "next/server";
+import Groq from "groq-sdk";
 import { z } from "zod";
-import { streamText } from "ai";
-import { openai } from "@ai-sdk/openai";
-import { generateSqlForPrompt } from "@/lib/mock-data";
 
 export const runtime = "nodejs";
 
@@ -17,18 +15,12 @@ const SYSTEM_PROMPT = [
   "You write correct, efficient SQL for the user's connected database and briefly explain your reasoning.",
   "Prefer explicit column lists over SELECT *, always qualify columns when more than one table is involved,",
   "and call out any assumptions you had to make about the schema.",
+  "Format your reply as a short explanation followed by the SQL statement.",
 ].join(" ");
 
 /**
- * Secure AI generation endpoint. The client only ever sends a prompt here —
- * this route is the sole place that reads the provider API key and appends
- * the system prompt, so no secret or prompt-engineering detail ever ships
- * to the browser.
- *
- * If no provider key is configured (e.g. local/demo environments), this
- * falls back to the app's built-in mock generator, streamed through the
- * exact same response shape — so the client's streaming UI code has
- * nothing provider-specific to branch on.
+ * Secure AI generation endpoint using Groq SDK.
+ * Reads GROQ_API_KEY from environment variables and streams completions.
  */
 export async function POST(req: NextRequest) {
   let body: unknown;
@@ -40,57 +32,68 @@ export async function POST(req: NextRequest) {
 
   const parsed = requestSchema.safeParse(body);
   if (!parsed.success) {
-    return Response.json({ error: parsed.error.issues.map((issue) => issue.message).join("; ") }, { status: 400 });
+    return Response.json(
+      { error: parsed.error.issues.map((issue) => issue.message).join("; ") },
+      { status: 400 }
+    );
   }
   const { prompt, schemaContext } = parsed.data;
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    return streamMockResponse(prompt, req.signal);
+    return Response.json(
+      { error: "GROQ_API_KEY is not configured on the server." },
+      { status: 500 }
+    );
   }
 
   try {
-    const system = schemaContext?.length ? `${SYSTEM_PROMPT}\n\nTables currently in scope: ${schemaContext.join(", ")}.` : SYSTEM_PROMPT;
+    const system = schemaContext?.length
+      ? `${SYSTEM_PROMPT}\n\nTables currently in scope: ${schemaContext.join(", ")}.`
+      : SYSTEM_PROMPT;
 
-    const result = streamText({
-      model: openai("gpt-4o-mini"),
-      system,
-      prompt,
-      abortSignal: req.signal,
+    const modelName = process.env.GROQ_MODEL ?? "llama3-70b-8192";
+    const groq = new Groq({ apiKey });
+
+    const completion = await groq.chat.completions.create({
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: prompt },
+      ],
+      model: modelName,
+      stream: true,
     });
 
-    return result.toTextStreamResponse();
+    const encoder = new TextEncoder();
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of completion) {
+            if (req.signal.aborted) return;
+            const content = chunk.choices[0]?.delta?.content || "";
+            if (content) controller.enqueue(encoder.encode(content));
+          }
+          controller.close();
+        } catch (streamErr) {
+          console.error("[/api/generate] stream failed", streamErr);
+          controller.error(streamErr);
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "X-Generation-Source": "groq",
+      },
+    });
   } catch (err) {
     console.error("[/api/generate] provider request failed", err);
-    return Response.json({ error: "The AI provider request failed. Check server logs." }, { status: 502 });
+    const message =
+      err instanceof Error
+        ? err.message
+        : "The AI provider request failed. Check server logs.";
+    return Response.json({ error: message }, { status: 502 });
   }
-}
-
-/** Streams the app's existing mock SQL generator word-by-word, so the UI works before an API key is configured. */
-function streamMockResponse(prompt: string, signal: AbortSignal) {
-  const { explanation, sql } = generateSqlForPrompt(prompt);
-  const text = `${explanation}\n\n${sql}`;
-  const words = text.split(/(\s+)/);
-  const encoder = new TextEncoder();
-
-  const stream = new ReadableStream({
-    async start(controller) {
-      for (const word of words) {
-        // The client disconnected (navigated away, aborted the fetch) —
-        // stop working and don't touch a controller nothing is reading from.
-        if (signal.aborted) return;
-        controller.enqueue(encoder.encode(word));
-        await new Promise((resolve) => setTimeout(resolve, 12));
-      }
-      controller.close();
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      // Lets the client (or a developer in devtools) tell a demo response apart from a live model call.
-      "X-Generation-Source": "mock",
-    },
-  });
 }

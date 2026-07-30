@@ -1,0 +1,32 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  data      Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  role      String
+  content   String
+  sql       String?
+  createdAt DateTime @default(now())
+}
+
+model QueryHistory {
+  id         String   @id @default(cuid())
+  query      String
+  status     String
+  durationMs Int?
+  createdAt  DateTime @default(now())
+}

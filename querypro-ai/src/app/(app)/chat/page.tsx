@@ -16,10 +16,17 @@ import { ResultsConsole } from "@/components/sql/ResultsConsole";
 import { WorkspaceSkeleton } from "@/components/ui/Skeleton";
 import { FadeIn } from "@/components/ui/FadeIn";
 import { useSimulatedLoad } from "@/lib/use-simulated-load";
-import { generateSqlForPrompt } from "@/lib/mock-data";
 import { useSqlStore } from "@/lib/useSqlStore";
-import { cn } from "@/lib/utils";
 import type { GeneratedQuery, SqlDialect } from "@/lib/mock-data";
+
+/** Splits a streamed response into a prose explanation and a trailing SQL statement, if one is present. */
+function splitExplanationAndSql(text: string): { text: string; sql?: string } {
+  const match = text.match(/((?:SELECT|INSERT|UPDATE|DELETE|WITH|CREATE)\b[\s\S]*)/i);
+  const sqlPart = match?.[1];
+  if (!match || match.index === undefined || !sqlPart) return { text };
+  const explanation = text.slice(0, match.index).trim();
+  return { text: explanation || "Here's the query:", sql: sqlPart.trim() };
+}
 
 const GeneratorHistoryDrawer = dynamic(
   () => import("@/components/generator/GeneratorHistoryDrawer").then((m) => m.GeneratorHistoryDrawer),
@@ -56,13 +63,40 @@ export default function AiSqlGeneratorPage() {
 
   const activeEntry = entries.find((e) => e.id === activeId) ?? null;
 
-  function handleGenerate(prompt: string) {
+  async function handleGenerate(prompt: string) {
     setGenerating(true);
     setShowExplanation(false);
     setShowOptimization(false);
 
-    setTimeout(() => {
-      const generated = generateSqlForPrompt(prompt);
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+
+      if (!res.ok || !res.body) {
+        const payload = await res.json().catch(() => null);
+        throw new Error(payload?.error ?? `Request failed with status ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        accumulated += decoder.decode(value, { stream: true });
+      }
+
+      const { text, sql } = splitExplanationAndSql(accumulated);
+      const generated: GeneratedQuery = {
+        sql: sql ?? accumulated.trim(),
+        explanation: text || "Generated SQL query based on your prompt.",
+        optimization: "Review indexes and column selection for your specific workload.",
+      };
+
       const id = `gen-${Date.now()}`;
       const newEntry: SessionEntry = {
         id,
@@ -73,9 +107,12 @@ export default function AiSqlGeneratorPage() {
       };
       setEntries((prev) => [newEntry, ...prev]);
       setActiveId(id);
-      setGenerating(false);
       setFollowUpPrompt("");
-    }, 1100);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to generate SQL", "error");
+    } finally {
+      setGenerating(false);
+    }
   }
 
   function updateActiveSql(sql: string) {

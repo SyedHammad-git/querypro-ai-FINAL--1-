@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Code2, Copy, Play, WrapText } from "lucide-react";
+import { Check, Code2, Copy, Play, Save, WrapText } from "lucide-react";
 import { SqlCodeEditor } from "./SqlCodeEditor";
 import { Button } from "@/components/ui/Button";
 
@@ -10,6 +10,8 @@ interface SqlWorkspaceEditorProps {
   value: string;
   onChange: (value: string) => void;
   onRun: () => void;
+  onSave?: () => void;
+  saving?: boolean;
   running?: boolean;
   onCursorChange?: (position: { line: number; column: number }) => void;
 }
@@ -19,6 +21,8 @@ export function SqlWorkspaceEditor({
   value,
   onChange,
   onRun,
+  onSave,
+  saving = false,
   running = false,
   onCursorChange,
 }: SqlWorkspaceEditorProps) {
@@ -48,9 +52,6 @@ export function SqlWorkspaceEditor({
       className="flex-1 flex flex-col bg-white dark:bg-black min-h-0 rounded shadow-elevation-1 overflow-hidden border border-gray-200 dark:border-transparent"
       aria-label="Advanced SQL editor"
     >
-      {/* Header bar — uses code-gutter token so text/icons are visible in
-          both dark (#0a0e18 bg → white gutter) and light mode
-          (#161e2e bg → soft-blue gutter). */}
       <div className="h-12 shrink-0 flex items-center justify-between px-lg bg-gray-50 dark:bg-[#171b26] border-b border-gray-200 dark:border-white/10">
         <div className="flex items-center gap-md min-w-0">
           <Code2 className="h-5 w-5 text-gray-500 dark:text-white/40 shrink-0" aria-hidden="true" />
@@ -77,6 +78,17 @@ export function SqlWorkspaceEditor({
             <WrapText className="h-4 w-4" aria-hidden="true" />
             Format
           </button>
+          {onSave && (
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving}
+              className="flex items-center gap-xs px-md py-1 text-label-sm text-gray-600 dark:text-white/60 hover:text-gray-900 dark:hover:text-white transition-all bg-gray-100 dark:bg-white/5 rounded border border-gray-200 dark:border-white/10 disabled:opacity-50"
+            >
+              <Save className="h-4 w-4" aria-hidden="true" />
+              {saving ? "Saving…" : "Save"}
+            </button>
+          )}
           <Button
             size="sm"
             onClick={onRun}
