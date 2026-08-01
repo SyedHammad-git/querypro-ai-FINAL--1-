@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -14,6 +14,7 @@ import {
 import { SCHEMA_GROUPS } from "@/lib/mock-data";
 import type { SchemaTable } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useSqlStore } from "@/lib/useSqlStore";
 
 const KIND_ICON: Record<SchemaTable["kind"], typeof TableProperties> = {
   table: TableProperties,
@@ -34,18 +35,27 @@ interface SchemaTreeProps {
 
 export function SchemaTree({ selectedTableId, onSelectTable }: SchemaTreeProps) {
   const [query, setQuery] = useState("");
+  const refreshSchema = useSqlStore((state) => state.refreshSchema);
+  const schemaGroups = useSqlStore((state) => state.schemaGroups);
+  const schemaLoading = useSqlStore((state) => state.schemaLoading);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
     Object.fromEntries(SCHEMA_GROUPS.map((g) => [g.id, g.expanded]))
   );
 
+  useEffect(() => {
+    void refreshSchema();
+  }, []);
+
+  const displayGroups = schemaLoading ? SCHEMA_GROUPS : schemaGroups;
+
   const filteredGroups = useMemo(() => {
-    if (!query.trim()) return SCHEMA_GROUPS;
+    if (!query.trim()) return displayGroups;
     const q = query.toLowerCase();
-    return SCHEMA_GROUPS.map((group) => ({
+    return displayGroups.map((group) => ({
       ...group,
       tables: group.tables.filter((t) => t.name.toLowerCase().includes(q)),
     }));
-  }, [query]);
+  }, [displayGroups, query]);
 
   return (
     <section

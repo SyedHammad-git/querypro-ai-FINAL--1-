@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       ? `${SYSTEM_PROMPT}\n\nTables currently in scope: ${schemaContext.join(", ")}.`
       : SYSTEM_PROMPT;
 
-    const modelName = process.env.GROQ_MODEL ?? "llama3-70b-8192";
+    const modelName = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
     const groq = new Groq({ apiKey });
 
     const completion = await groq.chat.completions.create({

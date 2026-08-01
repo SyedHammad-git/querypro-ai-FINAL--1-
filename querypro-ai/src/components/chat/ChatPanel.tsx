@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { MoreVertical, Sparkles, Trash2 } from "lucide-react";
-import { CHAT_CONTEXT_TABLES, CHAT_MESSAGES } from "@/lib/mock-data";
+import { CHAT_CONTEXT_TABLES } from "@/lib/mock-data";
 import type { ChatMessage } from "@/lib/types";
 import { ChatMessageBubble, ChatTypingIndicator } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
@@ -29,11 +29,13 @@ function splitExplanationAndSql(text: string): { text: string; sql?: string } {
 }
 
 export function ChatPanel({ compact = false, onRunQuery, className, contextTables = CHAT_CONTEXT_TABLES }: ChatPanelProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>(CHAT_MESSAGES);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
   const [waitingForFirstToken, setWaitingForFirstToken] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const historyAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -44,7 +46,47 @@ export function ChatPanel({ compact = false, onRunQuery, className, contextTable
   // the background and its reader loop keeps calling setState on a
   // component that's no longer mounted.
   useEffect(() => {
-    return () => abortRef.current?.abort();
+    const controller = new AbortController();
+    historyAbortRef.current = controller;
+
+    async function loadHistory() {
+      setLoadingHistory(true);
+      try {
+        const res = await fetch("/api/chat/save", { signal: controller.signal });
+        if (!res.ok) {
+          throw new Error(`Request failed with status ${res.status}`);
+        }
+
+        const payload = await res.json().catch(() => null);
+        const loadedMessages = Array.isArray(payload?.messages) ? payload.messages : [];
+        const mappedMessages = loadedMessages.map((message: { id: string; role: string; content: string; sql?: string | null; createdAt?: string }) => ({
+          id: message.id,
+          role: message.role === "assistant" ? "assistant" : "user",
+          text: message.content,
+          sql: message.sql ?? undefined,
+          timestamp: message.createdAt
+            ? new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : "",
+        }));
+
+        setMessages(mappedMessages);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error("[/components/chat/ChatPanel] failed to load chat history", error);
+        setMessages([]);
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoadingHistory(false);
+        }
+      }
+    }
+
+    void loadHistory();
+
+    return () => {
+      controller.abort();
+      abortRef.current?.abort();
+    };
   }, []);
 
   async function appendMessage(prompt: string) {
@@ -159,10 +201,14 @@ export function ChatPanel({ compact = false, onRunQuery, className, contextTable
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-lg space-y-lg scrollbar-hide">
-        {messages.length === 0 ? (
+        {loadingHistory && messages.length === 0 ? (
+          <div className="h-full flex items-center justify-center">
+            <ChatTypingIndicator />
+          </div>
+        ) : messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center gap-2 text-on-surface-variant">
             <Sparkles className="h-6 w-6 text-accent-ai" aria-hidden="true" />
-            <p className="font-body-md">Conversation cleared. Ask a question to start a new one.</p>
+            <p className="font-body-md">No saved chat history yet. Ask a question to start a new one.</p>
           </div>
         ) : (
           messages

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Eye, FunctionSquare, GripVertical, Search, Table, TableProperties } from "lucide-react";
 import { SCHEMA_GROUPS } from "@/lib/mock-data";
 import type { SchemaTable } from "@/lib/types";
+import { useSqlStore } from "@/lib/useSqlStore";
 
 export const BUILDER_DRAG_MIME = "application/x-querypro-table-id";
 
@@ -26,8 +27,16 @@ interface TablePaletteProps {
  */
 export function TablePalette({ onAddTable, addedTableIds }: TablePaletteProps) {
   const [query, setQuery] = useState("");
+  const refreshSchema = useSqlStore((state) => state.refreshSchema);
+  const schemaGroups = useSqlStore((state) => state.schemaGroups);
+  const schemaLoading = useSqlStore((state) => state.schemaLoading);
 
-  const allTables = SCHEMA_GROUPS.flatMap((g) => g.tables).filter(
+  useEffect(() => {
+    void refreshSchema();
+  }, []);
+
+  const displayGroups = schemaLoading ? SCHEMA_GROUPS : schemaGroups;
+  const allTables = displayGroups.flatMap((g) => g.tables).filter(
     (t) => t.kind === "table" && t.columns.length > 0
   );
   const filtered = query.trim()

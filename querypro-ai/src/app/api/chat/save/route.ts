@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 
@@ -9,6 +9,30 @@ const saveChatMessageSchema = z.object({
   content: z.string().min(1, "content is required").max(20000, "content is too long"),
   sql: z.string().max(20000).optional(),
 });
+
+export async function GET() {
+  try {
+    const chatMessages = await prisma.chatMessage.findMany({
+      orderBy: { createdAt: "asc" },
+      take: 100,
+      select: {
+        id: true,
+        role: true,
+        content: true,
+        sql: true,
+        createdAt: true,
+      },
+    });
+
+    return NextResponse.json({ success: true, messages: chatMessages }, { status: 200 });
+  } catch (error) {
+    console.error("[/api/chat/save GET] failed to load chat messages", error);
+    return NextResponse.json(
+      { success: false, error: "Failed to load chat messages." },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(req: NextRequest) {
   let body: unknown;

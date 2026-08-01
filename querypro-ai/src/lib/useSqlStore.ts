@@ -4,6 +4,7 @@ import { findTableById } from "@/components/schema/SchemaTree";
 import { buildSqlFromState, createEmptyBuilderState, nextBuilderId } from "@/lib/sql-builder";
 import { parseSqlToBuilderState } from "@/lib/sql-ast-sync";
 import { DB_TEMPLATES, type DbTemplateId } from "@/lib/db-templates";
+import { SCHEMA_GROUPS } from "@/lib/mock-data";
 import type { SuggestedJoin } from "@/components/builder/QueryCanvas";
 import type {
   AggregateFn,
@@ -14,6 +15,7 @@ import type {
   BuilderState,
   QueryResult,
   QueryResultColumn,
+  SchemaGroup,
   SchemaTable,
 } from "@/lib/types";
 
@@ -280,6 +282,12 @@ interface SqlStore {
   activeTemplateId: DbTemplateId | null;
   /** The outcome of the most recent executeSql() call — success rows or a real Postgres error. */
   queryResult: QueryResult | null;
+  /** Live schema groups fetched from the in-browser database, with mock data as the fallback while loading. */
+  schemaGroups: SchemaGroup[];
+  /** True while live schema data is being fetched from PGlite. */
+  schemaLoading: boolean;
+  /** Last schema-loading error, if any. */
+  schemaError: string | null;
 
   /** Boots the PGlite (WASM Postgres) instance. Safe to call more than once — later calls are no-ops once ready. */
   initDb: () => Promise<void>;
@@ -287,12 +295,96 @@ interface SqlStore {
   executeSql: (sqlText?: string) => Promise<QueryResult | null>;
   /** Wipes the public schema and seeds it with one of the curriculum templates from db-templates.ts. */
   loadTemplate: (name: DbTemplateId) => Promise<void>;
+  /** Refreshes the live schema groups from PGlite and updates the sidebar-friendly schema state. */
+  refreshSchema: () => Promise<void>;
 }
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingSnapshot: BuilderState | null = null;
 let sqlTextDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let sqlTextParseToken = 0;
+
+export async function getLiveSchemaGroups(): Promise<SchemaGroup[]> {
+  const db = await getDb();
+
+  const tableRows = await db.query<{ table_name: string; table_type: string }>(`
+    SELECT table_name, table_type
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_type IN ('BASE TABLE', 'VIEW')
+    ORDER BY table_name
+  `);
+
+  const columnRows = await db.query<{
+    table_name: string;
+    column_name: string;
+    data_type: string;
+    is_nullable: string;
+    column_default: string | null;
+  }>(`
+    SELECT table_name, column_name, data_type, is_nullable, column_default
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+    ORDER BY table_name, ordinal_position
+  `);
+
+  const constraintRows = await db.query<{
+    table_name: string;
+    column_name: string;
+    constraint_type: string;
+  }>(`
+    SELECT tc.table_name, kcu.column_name, tc.constraint_type
+    FROM information_schema.table_constraints AS tc
+    JOIN information_schema.key_column_usage AS kcu
+      ON tc.constraint_name = kcu.constraint_name
+     AND tc.table_schema = kcu.table_schema
+    WHERE tc.table_schema = 'public'
+    ORDER BY tc.table_name, kcu.ordinal_position
+  `);
+
+  const columnsByTable = new Map<string, Array<{ id: string; name: string; type: string; default: string | null; nullable: boolean; constraint: "primary-key" | "foreign-key" | "unique" | null }>>();
+  for (const row of columnRows.rows) {
+    const existing = columnsByTable.get(row.table_name) ?? [];
+    const constraints = new Map<string, "primary-key" | "foreign-key" | "unique" | null>();
+    for (const constraint of constraintRows.rows.filter((item) => item.table_name === row.table_name)) {
+      if (constraint.constraint_type === "PRIMARY KEY") {
+        constraints.set(constraint.column_name, "primary-key");
+      } else if (constraint.constraint_type === "FOREIGN KEY") {
+        constraints.set(constraint.column_name, "foreign-key");
+      } else if (constraint.constraint_type === "UNIQUE") {
+        constraints.set(constraint.column_name, "unique");
+      }
+    }
+
+    existing.push({
+      id: row.column_name,
+      name: row.column_name,
+      type: row.data_type,
+      default: row.column_default ?? null,
+      nullable: row.is_nullable === "YES",
+      constraint: constraints.get(row.column_name) ?? null,
+    });
+    columnsByTable.set(row.table_name, existing);
+  }
+
+  const tables: SchemaTable[] = [];
+  for (const row of tableRows.rows) {
+    const tableName = row.table_name;
+    tables.push({
+      id: tableName,
+      name: tableName,
+      kind: row.table_type === "VIEW" ? "view" : "table",
+      rowCount: 0,
+      diskSizeBytes: 0,
+      lastVacuumed: "—",
+      updatedAt: "—",
+      columns: columnsByTable.get(tableName) ?? [],
+      previewRows: [],
+    });
+  }
+
+  return [{ id: "public", name: "public", expanded: true, tables }];
+}
 
 export const useSqlStore = create<SqlStore>((set, get) => {
   /**
@@ -576,6 +668,9 @@ export const useSqlStore = create<SqlStore>((set, get) => {
     isExecuting: false,
     activeTemplateId: null,
     queryResult: null,
+    schemaGroups: SCHEMA_GROUPS,
+    schemaLoading: true,
+    schemaError: null,
 
     initDb: async () => {
       // `isDbInitializing` flips to true synchronously, below, before the
@@ -599,6 +694,7 @@ export const useSqlStore = create<SqlStore>((set, get) => {
           set({ activeTemplateId: DEFAULT_TEMPLATE_ID });
         }
         set({ isDbReady: true });
+        await get().refreshSchema();
       } catch (err) {
         // Covers a WASM boot failure and a (should-be-impossible, since this
         // template is verified end-to-end) seed failure alike. Either way
@@ -633,6 +729,9 @@ export const useSqlStore = create<SqlStore>((set, get) => {
         const executionMs = Math.round(performance.now() - start);
         const queryResult = resultsToQueryResult(results, executionMs);
         set({ queryResult, isExecuting: false });
+        if (/\b(CREATE|ALTER|DROP)\s+(TABLE|VIEW)\b/i.test(text)) {
+          await get().refreshSchema();
+        }
         return queryResult;
       } catch (err) {
         const executionMs = Math.round(performance.now() - start);
@@ -652,6 +751,7 @@ export const useSqlStore = create<SqlStore>((set, get) => {
         await resetPublicSchema(db);
         await db.exec(template.sql);
         set({ isDbReady: true, activeTemplateId: name, queryResult: null });
+        await get().refreshSchema();
       } catch (err) {
         // Both templates are verified end-to-end against a real PGlite
         // instance, so this branch should only fire from something
@@ -660,6 +760,19 @@ export const useSqlStore = create<SqlStore>((set, get) => {
         set({ queryResult: toErrorResult(err, 0) });
       } finally {
         set({ isDbInitializing: false });
+      }
+    },
+
+    refreshSchema: async () => {
+      if (get().schemaLoading) return;
+
+      set({ schemaLoading: true, schemaError: null });
+      try {
+        const nextGroups = await getLiveSchemaGroups();
+        set({ schemaGroups: nextGroups, schemaLoading: false, schemaError: null });
+      } catch (err) {
+        console.error("[/lib/useSqlStore] failed to refresh schema", err);
+        set({ schemaGroups: SCHEMA_GROUPS, schemaLoading: false, schemaError: err instanceof Error ? err.message : "Unknown schema error" });
       }
     },
   };
