@@ -38,6 +38,7 @@ export function SchemaTree({ selectedTableId, onSelectTable }: SchemaTreeProps) 
   const refreshSchema = useSqlStore((state) => state.refreshSchema);
   const schemaGroups = useSqlStore((state) => state.schemaGroups);
   const schemaLoading = useSqlStore((state) => state.schemaLoading);
+  const schemaError = useSqlStore((state) => state.schemaError);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
     Object.fromEntries(SCHEMA_GROUPS.map((g) => [g.id, g.expanded]))
   );
@@ -63,6 +64,11 @@ export function SchemaTree({ selectedTableId, onSelectTable }: SchemaTreeProps) 
       aria-label="Schema navigator"
     >
       <div className="p-md border-b border-border-subtle">
+        {schemaError ? (
+          <div className="mb-sm rounded border border-red-400/40 bg-red-500/10 px-sm py-2 text-[11px] text-red-700 dark:text-red-300">
+            {schemaError}
+          </div>
+        ) : null}
         <div className="relative">
           <Search
             className="absolute left-2 top-1/2 -translate-y-1/2 h-[13.5px] w-[13.5px] text-outline"

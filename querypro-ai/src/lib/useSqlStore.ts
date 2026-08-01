@@ -771,6 +771,7 @@ export const useSqlStore = create<SqlStore>((set, get) => {
         const nextGroups = await getLiveSchemaGroups();
         set({ schemaGroups: nextGroups, schemaLoading: false, schemaError: null });
       } catch (err) {
+        console.error("[schema debug]", err);
         console.error("[/lib/useSqlStore] failed to refresh schema", err);
         set({ schemaGroups: SCHEMA_GROUPS, schemaLoading: false, schemaError: err instanceof Error ? err.message : "Unknown schema error" });
       }
