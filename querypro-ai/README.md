@@ -13,6 +13,16 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) — it redirects to `/dashboard`.
 
+## Database setup
+
+1. Create a Supabase project.
+2. Copy [.env.example](.env.example) to `.env` and add both database URLs:
+   - `DATABASE_URL` should use the pooled connection string from Supabase with port `6543`.
+   - `DIRECT_URL` should use the direct connection string from Supabase with port `5432`.
+   You can find both in Supabase under Project Settings → Database → Connection string.
+3. Run `npx prisma generate`.
+4. Run `npx prisma db push`.
+
 To build for production:
 
 ```bash

@@ -72,6 +72,18 @@ export function ChatPanel({ compact = false, onRunQuery, className, contextTable
       setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, ...patch } : m)));
     }
 
+    const saveMessage = async (payload: { role: "user" | "assistant"; content: string; sql?: string }) => {
+      try {
+        await fetch("/api/chat/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } catch (error) {
+        console.error("[/components/chat/ChatPanel] failed to save chat message", error);
+      }
+    };
+
     try {
       // The client only ever sends the prompt + table names in scope — the
       // route handler owns the system prompt and the provider API key.
@@ -96,8 +108,13 @@ export function ChatPanel({ compact = false, onRunQuery, className, contextTable
         if (done) break;
         accumulated += decoder.decode(value, { stream: true });
         if (accumulated.trim().length > 0) setWaitingForFirstToken(false);
-        updateAssistant(splitExplanationAndSql(accumulated));
+        const parsed = splitExplanationAndSql(accumulated);
+        updateAssistant(parsed);
       }
+
+      const finalResponse = splitExplanationAndSql(accumulated);
+      void saveMessage({ role: "user", content: prompt });
+      void saveMessage({ role: "assistant", content: finalResponse.text, sql: finalResponse.sql });
     } catch (err) {
       if (controller.signal.aborted) return; // unmounted or superseded — no UI left to update
       setWaitingForFirstToken(false);
