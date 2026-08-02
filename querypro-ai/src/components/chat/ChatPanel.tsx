@@ -17,6 +17,8 @@ interface ChatPanelProps {
   className?: string;
   /** Table names currently in scope, sent as grounding context to the AI route. Defaults to the app's mock schema. */
   contextTables?: string[];
+  /** Optional preloaded messages to render instead of the persisted history fetch. */
+  initialMessages?: ChatMessage[];
 }
 
 /** Splits a streamed response into a prose explanation and a trailing SQL statement, if one is present. */
@@ -28,7 +30,7 @@ function splitExplanationAndSql(text: string): { text: string; sql?: string } {
   return { text: explanation || "Here's the query:", sql: sqlPart.trim() };
 }
 
-export function ChatPanel({ compact = false, onRunQuery, className, contextTables = CHAT_CONTEXT_TABLES }: ChatPanelProps) {
+export function ChatPanel({ compact = false, onRunQuery, className, contextTables = CHAT_CONTEXT_TABLES, initialMessages }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
   const [waitingForFirstToken, setWaitingForFirstToken] = useState(false);
@@ -46,6 +48,12 @@ export function ChatPanel({ compact = false, onRunQuery, className, contextTable
   // the background and its reader loop keeps calling setState on a
   // component that's no longer mounted.
   useEffect(() => {
+    if (initialMessages) {
+      setMessages(initialMessages);
+      setLoadingHistory(false);
+      return;
+    }
+
     const controller = new AbortController();
     historyAbortRef.current = controller;
 
@@ -87,7 +95,7 @@ export function ChatPanel({ compact = false, onRunQuery, className, contextTable
       controller.abort();
       abortRef.current?.abort();
     };
-  }, []);
+  }, [initialMessages]);
 
   async function appendMessage(prompt: string) {
     const controller = new AbortController();
@@ -182,7 +190,7 @@ export function ChatPanel({ compact = false, onRunQuery, className, contextTable
             <Sparkles className="h-5 w-5 text-accent-ai" aria-hidden="true" />
           </div>
           <div className="min-w-0">
-            <div className="font-heading text-headline-sm text-brand-dark truncate">
+            <div className="font-heading text-headline-sm text-on-surface truncate">
               QueryPro AI Bot
             </div>
             {!compact && (
@@ -200,13 +208,13 @@ export function ChatPanel({ compact = false, onRunQuery, className, contextTable
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-lg space-y-lg scrollbar-hide">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-lg space-y-lg scrollbar-hide">
         {loadingHistory && messages.length === 0 ? (
           <div className="h-full flex items-center justify-center">
             <ChatTypingIndicator />
           </div>
         ) : messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center gap-2 text-on-surface-variant">
+          <div className="h-full flex flex-col items-center justify-center text-center gap-2 text-on-surface-variant px-lg">
             <Sparkles className="h-6 w-6 text-accent-ai" aria-hidden="true" />
             <p className="font-body-md">No saved chat history yet. Ask a question to start a new one.</p>
           </div>

@@ -348,15 +348,15 @@ export default function EditorPage() {
       </div>
 
       {/* Main content — flex row: navigator + editor column */}
-      <div className="flex-1 flex min-h-0">
+      <div className="flex-1 flex min-h-0 overflow-hidden">
         {navigatorVisible && (
           <SchemaTree selectedTableId={selectedTable.id} onSelectTable={handleSelectTable} />
         )}
 
         {/* Editor column — flex column that must NOT overflow */}
-        <div className="flex-1 flex flex-col min-h-0 min-w-0">
+        <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
           {/* SQL editor pane — takes all remaining space above the panels */}
-          <div className="flex-1 min-h-0 p-lg">
+          <div className="flex-1 min-h-0 p-lg overflow-hidden">
             <SqlWorkspaceEditor
               filename={activeTab.name}
               value={activeTab.sql}
@@ -370,7 +370,7 @@ export default function EditorPage() {
           {/* Results console — shrink-0 so it never steals flex space from the
               editor; max-h-64 caps it so it can't push the log/statusbar off screen. */}
           {resultsVisible && queryResult && (
-            <div className="shrink-0 max-h-64 overflow-y-auto border-t border-border-subtle">
+            <div className="shrink-0 max-h-72 overflow-y-auto border-t border-border-subtle bg-surface-container-lowest">
               <ResultsConsole result={queryResult} />
             </div>
           )}
@@ -378,7 +378,7 @@ export default function EditorPage() {
           {/* Query activity log */}
           <section
             className={cn(
-              "shrink-0 border-t border-border-subtle bg-surface-container-lowest flex flex-col transition-[height] duration-200",
+              "shrink-0 min-h-0 border-t border-border-subtle bg-surface-container-lowest flex flex-col transition-[height] duration-200",
               logCollapsed ? "h-12" : "h-40"
             )}
             aria-label="Query log"

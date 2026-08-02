@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { History as HistoryIcon, Lightbulb, Plus, Sparkles } from "lucide-react";
 import { ConnectionBadge } from "@/components/ui/Chip";
 import { IconButton } from "@/components/ui/IconButton";
+import { ChatHistorySidebar, type ChatConversation } from "@/components/chat/ChatHistorySidebar";
 import { useToast } from "@/components/ui/Toast";
 import { PromptHero } from "@/components/generator/PromptHero";
 import { GeneratorToolbar } from "@/components/generator/GeneratorToolbar";
@@ -17,6 +18,7 @@ import { WorkspaceSkeleton } from "@/components/ui/Skeleton";
 import { FadeIn } from "@/components/ui/FadeIn";
 import { useSimulatedLoad } from "@/lib/use-simulated-load";
 import { useSqlStore } from "@/lib/useSqlStore";
+import { cn } from "@/lib/utils";
 import type { GeneratedQuery, SqlDialect } from "@/lib/mock-data";
 
 /** Splits a streamed response into a prose explanation and a trailing SQL statement, if one is present. */
@@ -52,6 +54,7 @@ export default function AiSqlGeneratorPage() {
   const [showOptimization, setShowOptimization] = useState(false);
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [followUpPrompt, setFollowUpPrompt] = useState("");
+  const [selectedConversation, setSelectedConversation] = useState<ChatConversation | null>(null);
 
   // Real PGlite engine — same singleton used by Editor and Builder.
   const { isExecuting, queryResult, initDb, executeSql } = useSqlStore();
@@ -211,13 +214,57 @@ export default function AiSqlGeneratorPage() {
           </div>
 
           {!activeEntry ? (
-            // Empty state — allow scrolling for the hero content
-            <div className="flex-1 overflow-y-auto">
-              <PromptHero onGenerate={handleGenerate} generating={generating} />
+            <div className="flex-1 flex min-h-0 overflow-hidden">
+              <ChatHistorySidebar
+                className="hidden xl:flex"
+                selectedConversationId={selectedConversation?.id}
+                onSelectConversation={setSelectedConversation}
+              />
+              <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                {selectedConversation ? (
+                  <div className="flex-1 overflow-y-auto p-lg">
+                    <div className="mx-auto flex max-w-3xl flex-col gap-md">
+                      <div className="rounded-xl border border-border-subtle bg-surface-container-lowest p-md shadow-elevation-1">
+                        <div className="text-label-sm text-on-surface-variant">Loaded conversation</div>
+                        <h2 className="mt-1 font-heading text-headline-sm text-on-surface">{selectedConversation.title}</h2>
+                      </div>
+                      {selectedConversation.messages.map((message) => (
+                        <div
+                          key={message.id}
+                          className={cn(
+                            "rounded-xl border border-border-subtle bg-surface-container-lowest p-md shadow-elevation-1",
+                            message.role === "assistant" ? "bg-surface-container-low" : ""
+                          )}
+                        >
+                          <div className="text-label-sm font-semibold text-on-surface-variant">
+                            {message.role === "assistant" ? "Assistant" : "You"}
+                          </div>
+                          <p className="mt-2 whitespace-pre-wrap text-body-md text-on-surface">{message.text}</p>
+                          {message.sql ? (
+                            <pre className="mt-3 overflow-x-auto rounded bg-surface-container-high p-sm font-mono text-label-sm text-on-surface-variant">
+                              {message.sql}
+                            </pre>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto">
+                    <PromptHero onGenerate={handleGenerate} generating={generating} />
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col min-h-0">
-              <GeneratorToolbar
+            <div className="flex-1 flex min-h-0 overflow-hidden">
+              <ChatHistorySidebar
+                className="hidden xl:flex"
+                selectedConversationId={selectedConversation?.id}
+                onSelectConversation={setSelectedConversation}
+              />
+              <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <GeneratorToolbar
                 dialect={dialect}
                 onDialectChange={setDialect}
                 onCopy={handleCopy}
@@ -233,8 +280,8 @@ export default function AiSqlGeneratorPage() {
                 running={isExecuting}
               />
 
-              <div className="flex-1 flex flex-col min-h-0 p-lg gap-md overflow-y-auto scrollbar-thin">
-                {showExplanation && (
+                <div className="flex-1 flex flex-col min-h-0 p-lg gap-md overflow-y-auto scrollbar-thin">
+                  {showExplanation && (
                   <InfoPanel
                     icon={Sparkles}
                     title="Explanation"
@@ -265,8 +312,8 @@ export default function AiSqlGeneratorPage() {
                 {queryResult && <ResultsConsole result={queryResult} />}
               </div>
 
-              <div className="shrink-0 p-md border-t border-border-subtle bg-surface-container-lowest">
-                <div className="relative max-w-3xl mx-auto">
+                <div className="shrink-0 p-md border-t border-border-subtle bg-surface-container-lowest">
+                  <div className="relative max-w-3xl mx-auto">
                   <textarea
                     value={followUpPrompt}
                     onChange={(e) => setFollowUpPrompt(e.target.value)}
@@ -284,6 +331,7 @@ export default function AiSqlGeneratorPage() {
                   >
                     {generating ? "Generating…" : "Generate"}
                   </button>
+                </div>
                 </div>
               </div>
             </div>

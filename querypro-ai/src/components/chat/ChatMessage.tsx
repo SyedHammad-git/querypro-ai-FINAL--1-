@@ -47,7 +47,7 @@ export function ChatMessageBubble({ message, onSuggestionClick, onRunQuery }: Ch
         <p
           className={cn(
             "font-sans text-body-md",
-            isAssistant ? "text-brand-dark" : "text-on-primary"
+            isAssistant ? "text-on-surface" : "text-on-primary"
           )}
         >
           {message.text}
@@ -71,7 +71,7 @@ export function ChatMessageBubble({ message, onSuggestionClick, onRunQuery }: Ch
         {message.sql && (
           <>
             <CodeBlock sql={message.sql} className="mt-md mb-md" />
-            <div className="flex items-center gap-md text-outline">
+            <div className="flex flex-wrap items-center gap-md text-on-surface-variant">
               <button
                 type="button"
                 onClick={() => setHelpful((v) => !v)}

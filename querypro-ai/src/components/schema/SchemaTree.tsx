@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -35,17 +35,12 @@ interface SchemaTreeProps {
 
 export function SchemaTree({ selectedTableId, onSelectTable }: SchemaTreeProps) {
   const [query, setQuery] = useState("");
-  const refreshSchema = useSqlStore((state) => state.refreshSchema);
   const schemaGroups = useSqlStore((state) => state.schemaGroups);
   const schemaLoading = useSqlStore((state) => state.schemaLoading);
   const schemaError = useSqlStore((state) => state.schemaError);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
     Object.fromEntries(SCHEMA_GROUPS.map((g) => [g.id, g.expanded]))
   );
-
-  useEffect(() => {
-    void refreshSchema();
-  }, []);
 
   const displayGroups = schemaLoading ? SCHEMA_GROUPS : schemaGroups;
 
@@ -166,13 +161,19 @@ export function SchemaTree({ selectedTableId, onSelectTable }: SchemaTreeProps) 
   );
 }
 
+function getSchemaGroups() {
+  const liveGroups = useSqlStore.getState().schemaGroups;
+  return liveGroups.length > 0 ? liveGroups : SCHEMA_GROUPS;
+}
+
 export function getDefaultTable(): SchemaTable {
-  const publicGroup = SCHEMA_GROUPS.find((g) => g.id === "public");
+  const groups = getSchemaGroups();
+  const publicGroup = groups.find((g) => g.id === "public") ?? groups[0];
   return publicGroup?.tables[0] as SchemaTable;
 }
 
 export function findTableById(id: string): SchemaTable | undefined {
-  for (const group of SCHEMA_GROUPS) {
+  for (const group of getSchemaGroups()) {
     const match = group.tables.find((t) => t.id === id);
     if (match) return match;
   }
@@ -182,7 +183,7 @@ export function findTableById(id: string): SchemaTable | undefined {
 /** Case-insensitive lookup by table name — used to resolve FROM/JOIN clauses parsed from raw SQL text. */
 export function findTableByName(name: string): SchemaTable | undefined {
   const target = name.toLowerCase();
-  for (const group of SCHEMA_GROUPS) {
+  for (const group of getSchemaGroups()) {
     const match = group.tables.find((t) => t.name.toLowerCase() === target);
     if (match) return match;
   }

@@ -55,7 +55,7 @@ export function ChatInput({ contextTables, onSend, disabled }: ChatInputProps) {
             type="button"
             aria-label="Attach a file"
             onClick={() => showToast("File attachments aren't available in this demo yet")}
-            className="p-2 text-outline hover:text-brand-dark transition-colors"
+            className="p-2 text-on-surface-variant hover:text-on-surface transition-colors"
           >
             <Paperclip className="h-5 w-5" aria-hidden="true" />
           </button>
