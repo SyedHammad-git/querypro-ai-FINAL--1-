@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   CheckCircle2,
@@ -19,8 +19,8 @@ import { PageSkeleton } from "@/components/ui/Skeleton";
 import { HistoryTable } from "@/components/history/HistoryTable";
 import { InsightsPanel } from "@/components/history/InsightsPanel";
 import { useToast } from "@/components/ui/Toast";
-import { QUERY_HISTORY } from "@/lib/mock-data";
-import { cn } from "@/lib/utils";
+import type { QueryHistoryEntry } from "@/lib/types";
+import { cn, timeAgo } from "@/lib/utils";
 
 type FilterKey = "all" | "success" | "failed" | "long-running" | "favorites";
 
@@ -36,20 +36,69 @@ export default function QueryHistoryPage() {
   const { showToast } = useToast();
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
   const [search, setSearch] = useState("");
+  const [entries, setEntries] = useState<QueryHistoryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadHistory() {
+      try {
+        const response = await fetch("/api/history/save");
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.error || "Unable to load query history");
+
+        const mappedEntries: QueryHistoryEntry[] = (payload.history ?? []).map((item: { id: string; query: string; status: string; durationMs: number | null; createdAt: string }) => {
+          const status = item.status === "error" ? "error" : item.status === "running" ? "running" : "success";
+          const sql = item.query?.trim() ?? "";
+          return {
+            id: item.id,
+            status,
+            sqlSnippet: sql.length > 48 ? `${sql.slice(0, 45)}…` : sql || "Empty query",
+            sqlFull: sql || "",
+            database: "PGlite / Local DB",
+            executionMs: item.durationMs ?? null,
+            rowCount: null,
+            timestampLabel: timeAgo(item.createdAt),
+            errorMessage: status === "error" ? "The latest query failed to execute." : undefined,
+            isFavorite: false,
+          };
+        });
+
+        if (!cancelled) {
+          setEntries(mappedEntries);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setEntries([]);
+          showToast(error instanceof Error ? error.message : "Unable to load query history");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [showToast]);
 
   const filteredEntries = useMemo(() => {
-    let entries = QUERY_HISTORY;
-    if (activeFilter === "success") entries = entries.filter((e) => e.status === "success");
-    if (activeFilter === "failed") entries = entries.filter((e) => e.status === "error");
-    if (activeFilter === "long-running") entries = entries.filter((e) => (e.executionMs ?? 0) > 500);
-    if (activeFilter === "favorites") entries = entries.filter((e) => e.isFavorite);
+    let nextEntries = entries;
+    if (activeFilter === "success") nextEntries = nextEntries.filter((e) => e.status === "success");
+    if (activeFilter === "failed") nextEntries = nextEntries.filter((e) => e.status === "error");
+    if (activeFilter === "long-running") nextEntries = nextEntries.filter((e) => (e.executionMs ?? 0) > 500);
+    if (activeFilter === "favorites") nextEntries = nextEntries.filter((e) => e.isFavorite);
 
     if (search.trim()) {
       const q = search.toLowerCase();
-      entries = entries.filter((e) => e.sqlFull.toLowerCase().includes(q));
+      nextEntries = nextEntries.filter((e) => e.sqlFull.toLowerCase().includes(q));
     }
-    return entries;
-  }, [activeFilter, search]);
+    return nextEntries;
+  }, [activeFilter, search, entries]);
 
   function handleExport() {
     const rows = filteredEntries.map((e) => ({
@@ -141,7 +190,7 @@ export default function QueryHistoryPage() {
               <div className="py-2xl flex flex-col items-center gap-2 text-center">
                 <Search className="h-8 w-8 text-outline-variant" aria-hidden="true" />
                 <p className="text-body-md text-on-surface-variant">
-                  No queries match this filter yet.
+                  {loading ? "Loading recent queries…" : "No queries match this filter yet."}
                 </p>
               </div>
             ) : (
@@ -149,7 +198,7 @@ export default function QueryHistoryPage() {
             )}
             <div className="px-lg py-md bg-surface-container-lowest border-t border-border-subtle flex justify-between items-center">
               <span className="font-label-sm text-on-surface-variant">
-                Showing {filteredEntries.length} of {filteredEntries.length} queries
+                Showing {filteredEntries.length} of {entries.length || filteredEntries.length} queries
               </span>
               <div className="flex gap-xs">
                 <button

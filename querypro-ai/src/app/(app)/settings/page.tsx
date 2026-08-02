@@ -2,17 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { Camera, Database, KeyRound, Plus, Save, Trash2 } from "lucide-react";
+import { Camera, Database, KeyRound, Plus, Save } from "lucide-react";
 import { PageHeader } from "@/components/layout/AppShell";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingReveal } from "@/components/ui/LoadingReveal";
 import { PageSkeleton } from "@/components/ui/Skeleton";
 import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
 import { useAuthStore } from "@/lib/useAuthStore";
-import { CONNECTED_DATABASES } from "@/lib/mock-data";
+import { useSqlStore } from "@/lib/useSqlStore";
 
 const SECTIONS = ["Profile", "Connections", "Notifications", "API Keys"] as const;
 type Section = (typeof SECTIONS)[number];
@@ -40,8 +39,9 @@ function ToggleRow({
 
 export default function SettingsPage() {
   const [section, setSection] = useState<Section>("Profile");
-  const [connections, setConnections] = useState(CONNECTED_DATABASES);
   const { showToast } = useToast();
+  const isDbReady = useSqlStore((state) => state.isDbReady);
+  const schemaError = useSqlStore((state) => state.schemaError);
 
   // Auth store
   const user = useAuthStore((s) => s.user);
@@ -80,15 +80,6 @@ export default function SettingsPage() {
   function handleSaveProfile() {
     updateProfile({ name: name.trim() || user?.name, email: email.trim() || user?.email, avatarUrl: avatarPreview ?? undefined });
     showToast("Profile saved");
-  }
-
-  function handleRemoveConnection(id: string, name: string) {
-    setConnections((prev) => prev.filter((db) => db.id !== id));
-    showToast(`Removed ${name}`);
-  }
-
-  function handleAddConnection() {
-    showToast("Connecting a new database isn't available in this demo yet");
   }
 
   const avatarSrc = avatarPreview ?? `https://i.pravatar.cc/72?img=13`;
@@ -193,41 +184,31 @@ export default function SettingsPage() {
             {section === "Connections" && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Connected databases</CardTitle>
-                  <Button size="sm" variant="secondary" onClick={handleAddConnection}>
-                    <Plus className="h-4 w-4" aria-hidden="true" />
-                    Add connection
-                  </Button>
+                  <CardTitle>Backend connection</CardTitle>
                 </CardHeader>
-                <CardBody className="divide-y divide-border-subtle p-0">
-                  {connections.length === 0 ? (
-                    <EmptyState
-                      icon={Database}
-                      title="No databases connected"
-                      description="Add a connection to start querying."
-                    />
-                  ) : (
-                    connections.map((db) => (
-                      <div key={db.id} className="flex items-center justify-between gap-md px-md py-md">
-                        <div className="flex items-center gap-md min-w-0">
-                          <div className="w-9 h-9 rounded bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                            <Database className="h-[13.5px] w-[13.5px]" aria-hidden="true" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-mono text-label-md truncate">{db.name}</div>
-                            <div className="text-label-sm text-on-surface-variant capitalize">{db.status}</div>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveConnection(db.id, db.name)}
-                          aria-label={`Remove ${db.name} connection`}
-                          className="p-2 rounded hover:bg-error/10 text-outline hover:text-error transition-colors shrink-0"
-                        >
-                          <Trash2 className="h-[13.5px] w-[13.5px]" aria-hidden="true" />
-                        </button>
+                <CardBody className="space-y-md">
+                  <div className="flex items-center justify-between gap-md rounded-lg border border-border-subtle bg-surface-container-low px-md py-md">
+                    <div className="flex items-center gap-md min-w-0">
+                      <div className="w-9 h-9 rounded bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                        <Database className="h-[13.5px] w-[13.5px]" aria-hidden="true" />
                       </div>
-                    ))
+                      <div className="min-w-0">
+                        <div className="font-mono text-label-md truncate">Prisma + PGlite</div>
+                        <div className="text-label-sm text-on-surface-variant">{isDbReady ? "Connected" : "Booting"}</div>
+                      </div>
+                    </div>
+                    <span className={`rounded-full px-sm py-1 text-[10px] font-semibold uppercase ${isDbReady ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}>
+                      {isDbReady ? "Live" : "Starting"}
+                    </span>
+                  </div>
+                  {schemaError ? (
+                    <div className="rounded-lg border border-red-400/30 bg-red-500/10 px-md py-sm text-sm text-red-700 dark:text-red-300">
+                      {schemaError}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-on-surface-variant">
+                      The workspace is using the live in-browser database and schema refresh pipeline.
+                    </p>
                   )}
                 </CardBody>
               </Card>

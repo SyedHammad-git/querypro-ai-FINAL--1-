@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import {
   ArrowRight,
@@ -13,8 +13,8 @@ import {
 } from "lucide-react";
 import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
-import { SCHEMA_GROUPS } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
+import { useSqlStore } from "@/lib/useSqlStore";
 
 type Step = "upload" | "map" | "review";
 type Collision = "skip" | "upsert" | "fail";
@@ -35,12 +35,6 @@ const COLLISION_OPTIONS: { id: Collision; label: string; description: string }[]
   { id: "upsert", label: "Overwrite (Upsert)", description: "Update records with matching PKs." },
   { id: "fail", label: "Fail on Error", description: "Stop import if a duplicate is found." },
 ];
-
-const ALL_TABLES = SCHEMA_GROUPS.flatMap((group) =>
-  group.tables
-    .filter((t) => t.kind === "table")
-    .map((table) => ({ id: table.id, qualifiedName: `${group.name}.${table.name}`, columns: table.columns }))
-);
 
 const MAX_FILE_BYTES = 512 * 1024 * 1024; // 512MB, matching the stated limit
 
@@ -78,14 +72,37 @@ export default function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [fields, setFields] = useState<ParsedField[]>([]);
   const [isSqlFile, setIsSqlFile] = useState(false);
-  const [targetTableId, setTargetTableId] = useState(ALL_TABLES[0]?.id ?? "");
+  const [targetTableId, setTargetTableId] = useState("");
   const [mappings, setMappings] = useState<Record<string, string>>({});
   const [collision, setCollision] = useState<Collision>("skip");
   const [dryRun, setDryRun] = useState(true);
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState(false);
 
-  const targetTable = ALL_TABLES.find((t) => t.id === targetTableId) ?? ALL_TABLES[0];
+  const schemaGroups = useSqlStore((state) => state.schemaGroups);
+  const allTables = useMemo(
+    () =>
+      schemaGroups.flatMap((group) =>
+        group.tables
+          .filter((t) => t.kind === "table")
+          .map((table) => ({ id: table.id, qualifiedName: `${group.name}.${table.name}`, columns: table.columns }))
+      ),
+    [schemaGroups]
+  );
+
+  useEffect(() => {
+    if (!allTables.length) {
+      setTargetTableId("");
+      return;
+    }
+
+    const exists = allTables.some((table) => table.id === targetTableId);
+    if (!exists) {
+      setTargetTableId(allTables[0]?.id ?? "");
+    }
+  }, [allTables, targetTableId]);
+
+  const targetTable = allTables.find((t) => t.id === targetTableId) ?? allTables[0];
 
   const mappedCount = useMemo(
     () => fields.filter((f) => mappings[f.source] && mappings[f.source] !== "ignore").length,
@@ -431,7 +448,7 @@ export default function ImportPage() {
                   onChange={(e) => setTargetTableId(e.target.value)}
                   className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg py-2.5 px-sm text-body-md focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-colors"
                 >
-                  {ALL_TABLES.map((t) => (
+                  {allTables.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.qualifiedName}
                     </option>

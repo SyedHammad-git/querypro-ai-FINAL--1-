@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bookmark, Play, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/AppShell";
@@ -10,16 +10,63 @@ import { LoadingReveal } from "@/components/ui/LoadingReveal";
 import { PageSkeleton } from "@/components/ui/Skeleton";
 import { CodeBlock } from "@/components/sql/CodeBlock";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { QUERY_HISTORY } from "@/lib/mock-data";
-import { DRAFT_SQL_STORAGE_KEY } from "@/lib/utils";
+import type { QueryHistoryEntry } from "@/lib/types";
+import { DRAFT_SQL_STORAGE_KEY, timeAgo } from "@/lib/utils";
 
 export default function SavedQueriesPage() {
   const router = useRouter();
   const [removedIds, setRemovedIds] = useState<string[]>([]);
+  const [entries, setEntries] = useState<QueryHistoryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSavedQueries() {
+      try {
+        const response = await fetch("/api/history/save");
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.error || "Unable to load saved queries");
+
+        const mappedEntries: QueryHistoryEntry[] = (payload.history ?? []).map((item: { id: string; query: string; status: string; durationMs: number | null; createdAt: string }) => {
+          const status = item.status === "error" ? "error" : item.status === "running" ? "running" : "success";
+          const sql = item.query?.trim() ?? "";
+          return {
+            id: item.id,
+            status,
+            sqlSnippet: sql.length > 48 ? `${sql.slice(0, 45)}…` : sql || "Empty query",
+            sqlFull: sql || "",
+            database: "PGlite / Local DB",
+            executionMs: item.durationMs ?? null,
+            rowCount: null,
+            timestampLabel: timeAgo(item.createdAt),
+            isFavorite: true,
+          };
+        });
+
+        if (!cancelled) {
+          setEntries(mappedEntries);
+        }
+      } catch {
+        if (!cancelled) {
+          setEntries([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadSavedQueries();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const savedQueries = useMemo(
-    () => QUERY_HISTORY.filter((q) => q.isFavorite && !removedIds.includes(q.id)),
-    [removedIds]
+    () => entries.filter((q) => !removedIds.includes(q.id)).slice(0, 8),
+    [entries, removedIds]
   );
 
   function handleRun(sql: string) {
@@ -45,7 +92,7 @@ export default function SavedQueriesPage() {
             <EmptyState
               icon={Bookmark}
               title="Nothing saved yet"
-              description="Star a query from Query History or the AI assistant to pin it here for quick access."
+              description={loading ? "Loading your saved queries…" : "No persisted queries are available yet. Run a query and it will appear here automatically."}
               action={
                 <Button variant="secondary" onClick={() => router.push("/history")}>
                   Browse Query History

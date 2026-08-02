@@ -386,6 +386,20 @@ export async function getLiveSchemaGroups(): Promise<SchemaGroup[]> {
   return [{ id: "public", name: "public", expanded: true, tables }];
 }
 
+async function saveQueryHistoryEntry(query: string, status: QueryResult["status"], durationMs: number | null): Promise<void> {
+  if (typeof window === "undefined") return;
+
+  try {
+    await fetch("/api/history/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, status, durationMs }),
+    });
+  } catch (err) {
+    console.error("[/lib/useSqlStore] failed to save query history", err);
+  }
+}
+
 export const useSqlStore = create<SqlStore>((set, get) => {
   /**
    * Pushes any debounced snapshot that's still waiting to land in `past`,
@@ -669,7 +683,7 @@ export const useSqlStore = create<SqlStore>((set, get) => {
     activeTemplateId: null,
     queryResult: null,
     schemaGroups: SCHEMA_GROUPS,
-    schemaLoading: true,
+    schemaLoading: false,
     schemaError: null,
 
     initDb: async () => {
@@ -729,6 +743,7 @@ export const useSqlStore = create<SqlStore>((set, get) => {
         const executionMs = Math.round(performance.now() - start);
         const queryResult = resultsToQueryResult(results, executionMs);
         set({ queryResult, isExecuting: false });
+        void saveQueryHistoryEntry(text, queryResult.status, queryResult.executionMs);
         if (/\b(CREATE|ALTER|DROP)\s+(TABLE|VIEW)\b/i.test(text)) {
           await get().refreshSchema();
         }
@@ -737,6 +752,7 @@ export const useSqlStore = create<SqlStore>((set, get) => {
         const executionMs = Math.round(performance.now() - start);
         const queryResult = toErrorResult(err, executionMs);
         set({ queryResult, isExecuting: false });
+        void saveQueryHistoryEntry(text, queryResult.status, queryResult.executionMs);
         return queryResult;
       }
     },
