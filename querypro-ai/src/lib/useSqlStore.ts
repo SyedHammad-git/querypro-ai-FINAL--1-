@@ -390,11 +390,32 @@ async function saveQueryHistoryEntry(query: string, status: QueryResult["status"
   if (typeof window === "undefined") return;
 
   try {
-    await fetch("/api/history/save", {
+    const response = await fetch("/api/history/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query, status, durationMs }),
     });
+
+    if (!response.ok) {
+      let errorDetail = "No additional details";
+      try {
+        const payload = await response.json();
+        errorDetail = typeof payload === "object" && payload && "error" in payload ? String((payload as { error?: unknown }).error) : JSON.stringify(payload);
+      } catch {
+        try {
+          errorDetail = await response.text();
+        } catch {
+          errorDetail = "Unable to read response body";
+        }
+      }
+
+      console.error("[/lib/useSqlStore] failed to save query history", {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorDetail,
+      });
+      return;
+    }
   } catch (err) {
     console.error("[/lib/useSqlStore] failed to save query history", err);
   }

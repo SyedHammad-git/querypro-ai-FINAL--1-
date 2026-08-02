@@ -80,6 +80,7 @@ export default function ImportPage() {
   const [imported, setImported] = useState(false);
 
   const schemaGroups = useSqlStore((state) => state.schemaGroups);
+  const initDb = useSqlStore((state) => state.initDb);
   const allTables = useMemo(
     () =>
       schemaGroups.flatMap((group) =>
@@ -89,6 +90,10 @@ export default function ImportPage() {
       ),
     [schemaGroups]
   );
+
+  useEffect(() => {
+    void initDb();
+  }, [initDb]);
 
   useEffect(() => {
     if (!allTables.length) {

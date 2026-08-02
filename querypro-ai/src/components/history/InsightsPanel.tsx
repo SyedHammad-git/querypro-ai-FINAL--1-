@@ -52,23 +52,23 @@ export function InsightsPanel() {
   }, []);
 
   const trendValues = useMemo(() => {
-    if (!entries.length) return [24, 36, 30, 42, 48, 54];
+    if (!entries.length) return [];
 
-    return Array.from({ length: 6 }, (_, index) => {
+    return Array.from({ length: Math.min(6, entries.length) }, (_, index) => {
       const entry = entries[entries.length - 1 - index];
-      if (!entry?.executionMs) return 24;
-      return Math.max(12, Math.min(100, Math.round(entry.executionMs / 12)));
+      if (!entry?.executionMs) return 0;
+      return Math.max(0, Math.min(100, Math.round(entry.executionMs / 12)));
     }).reverse();
   }, [entries]);
 
   const averageExecutionMs = useMemo(() => {
-    if (!entries.length) return 0;
+    if (!entries.length) return null;
     const total = entries.reduce((sum, entry) => sum + (entry.executionMs ?? 0), 0);
     return Math.round(total / entries.length);
   }, [entries]);
 
   const successRate = useMemo(() => {
-    if (!entries.length) return 100;
+    if (!entries.length) return null;
     const successes = entries.filter((entry) => entry.status === "success").length;
     return Math.round((successes / entries.length) * 100);
   }, [entries]);
@@ -101,17 +101,23 @@ export function InsightsPanel() {
         </h3>
         <div className="bg-surface-container-low rounded-xl p-md border border-border-subtle">
           <div className="flex items-end justify-between h-24 gap-1 mb-md" role="img" aria-label="Query execution time trend over the last 24 hours">
-            {trendValues.map((value, i) => (
-              <div
-                key={i}
-                className={cn(
-                  "flex-1 rounded-t-sm",
-                  i === trendValues.length - 2 ? "bg-primary/40" : "bg-primary/20",
-                  i === trendValues.length - 1 && "bg-primary"
-                )}
-                style={{ height: `${value}%` }}
-              />
-            ))}
+            {trendValues.length === 0 ? (
+              <div className="w-full h-full flex items-center justify-center rounded border border-dashed border-border-subtle bg-surface-container-lowest text-sm text-on-surface-variant">
+                Not enough data yet
+              </div>
+            ) : (
+              trendValues.map((value, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    "flex-1 rounded-t-sm",
+                    i === trendValues.length - 2 ? "bg-primary/40" : "bg-primary/20",
+                    i === trendValues.length - 1 && "bg-primary"
+                  )}
+                  style={{ height: `${value}%` }}
+                />
+              ))
+            )}
           </div>
           <div className="flex justify-between font-mono text-label-sm text-outline">
             <span>24h ago</span>
@@ -120,11 +126,11 @@ export function InsightsPanel() {
           <div className="mt-lg pt-lg border-t border-border-subtle flex justify-between">
             <div>
               <div className="text-[7.5px] text-outline uppercase">Avg. Time</div>
-              <div className="font-heading text-headline-sm text-on-surface">{averageExecutionMs ? `${averageExecutionMs}ms` : "—"}</div>
+              <div className="font-heading text-headline-sm text-on-surface">{averageExecutionMs === null ? "—" : `${averageExecutionMs}ms`}</div>
             </div>
             <div className="text-right">
               <div className="text-[7.5px] text-outline uppercase">Success Rate</div>
-              <div className="font-heading text-headline-sm text-success">{successRate}%</div>
+              <div className="font-heading text-headline-sm text-success">{successRate === null ? "—" : `${successRate}%`}</div>
             </div>
           </div>
         </div>
