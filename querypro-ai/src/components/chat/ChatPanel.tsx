@@ -183,40 +183,40 @@ export function ChatPanel({ compact = false, onRunQuery, className, contextTable
   }
 
   return (
-    <div className={cn(className ?? "flex-1", "bg-surface-container-lowest border border-border-subtle rounded shadow-elevation-1 flex flex-col overflow-hidden min-h-0")}>
-      <div className="p-md border-b border-border-subtle flex justify-between items-center bg-surface-container-lowest shrink-0">
-        <div className="flex items-center gap-md min-w-0">
-          <div className="w-10 h-10 rounded-full bg-accent-ai/10 flex items-center justify-center shrink-0">
-            <Sparkles className="h-5 w-5 text-accent-ai" aria-hidden="true" />
+    <div className={cn(className ?? "flex-1", "flex min-h-0 flex-col overflow-hidden rounded-xl border border-border-subtle/70 bg-surface-container-lowest shadow-[0_0_0_1px_rgba(255,255,255,0.02)]")}>
+      <div className="flex shrink-0 items-center justify-between border-b border-border-subtle/70 bg-surface-container-lowest px-3 py-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-ai/10">
+            <Sparkles className="h-4 w-4 text-accent-ai" aria-hidden="true" />
           </div>
           <div className="min-w-0">
-            <div className="font-heading text-headline-sm text-on-surface truncate">
-              QueryPro AI Bot
+            <div className="truncate text-[13px] font-semibold text-on-surface">
+              {compact ? "AI Assistant" : "QueryPro AI Bot"}
             </div>
             {!compact && (
-              <div className="font-mono text-label-sm text-outline">Online · /api/generate</div>
+              <div className="truncate text-[11px] text-on-surface-variant">Online · /api/generate</div>
             )}
           </div>
         </div>
-        <div className="flex gap-xs shrink-0">
-          <IconButton aria-label="Clear conversation" onClick={handleClear}>
+        <div className="flex shrink-0 gap-1.5">
+          <IconButton aria-label="Clear conversation" className="h-7 w-7" onClick={handleClear}>
             <Trash2 className="h-[13.5px] w-[13.5px]" aria-hidden="true" />
           </IconButton>
-          <IconButton aria-label="More options">
+          <IconButton aria-label="More options" className="h-7 w-7">
             <MoreVertical className="h-[13.5px] w-[13.5px]" aria-hidden="true" />
           </IconButton>
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-lg space-y-lg scrollbar-hide">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3 scrollbar-thin">
         {loadingHistory && messages.length === 0 ? (
-          <div className="h-full flex items-center justify-center">
+          <div className="flex h-full items-center justify-center">
             <ChatTypingIndicator />
           </div>
         ) : messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center gap-2 text-on-surface-variant px-lg">
-            <Sparkles className="h-6 w-6 text-accent-ai" aria-hidden="true" />
-            <p className="font-body-md">No saved chat history yet. Ask a question to start a new one.</p>
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-on-surface-variant">
+            <Sparkles className="h-5 w-5 text-accent-ai" aria-hidden="true" />
+            <p className="text-sm leading-6">No saved chat history yet. Ask a question to start a new one.</p>
           </div>
         ) : (
           messages

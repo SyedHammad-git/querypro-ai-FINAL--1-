@@ -81,7 +81,7 @@ const TOKEN_CLASSES: Record<TokenKind, string> = {
   keyword: "text-syntax-keyword",
   number: "text-tertiary-fixed-dim",
   function: "text-syntax-function",
-  text: "text-gray-900 dark:text-white/85",
+  text: "text-white/90",
 };
 
 /** Renders SQL as a list of highlighted <span> nodes, ready to drop in a <pre><code>. */

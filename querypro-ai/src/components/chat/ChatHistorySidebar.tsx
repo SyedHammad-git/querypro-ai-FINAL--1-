@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MessageSquareText } from "lucide-react";
+import { MessageSquareText, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
 import type { ChatMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,7 @@ function toConversationLabel(messages: ChatMessage[]): string {
 export function ChatHistorySidebar({ className, onSelectConversation, selectedConversationId }: ChatHistorySidebarProps) {
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -97,49 +99,70 @@ export function ChatHistorySidebar({ className, onSelectConversation, selectedCo
   }, []);
 
   return (
-    <aside className={cn("w-72 shrink-0 border-r border-border-subtle bg-surface-container-lowest flex flex-col", className)}>
-      <div className="border-b border-border-subtle px-md py-sm">
-        <div className="flex items-center gap-sm">
-          <MessageSquareText className="h-4 w-4 text-primary" aria-hidden="true" />
-          <h2 className="font-label-md text-on-surface">Recent chats</h2>
+    <aside className={cn("shrink-0 border-r border-border-subtle/80 bg-surface-container-lowest flex flex-col transition-all duration-200 min-h-0", collapsed ? "w-14" : "w-72", className)}>
+      <div className={cn("flex items-center border-b border-border-subtle/70 px-2.5 py-2", collapsed ? "justify-center" : "justify-between")}>
+        <div className={cn("flex items-center gap-2 min-w-0", collapsed && "justify-center")}>
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-ai/10 shrink-0">
+            <MessageSquareText className="h-3.5 w-3.5 text-accent-ai" aria-hidden="true" />
+          </div>
+          {!collapsed && (
+            <div className="min-w-0">
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface">History</h2>
+              <p className="mt-0.5 text-[10px] leading-4 text-on-surface-variant">Saved chats</p>
+            </div>
+          )}
         </div>
-        <p className="mt-1 text-label-sm text-on-surface-variant">Open a saved conversation and continue it.</p>
+        <IconButton
+          aria-label={collapsed ? "Expand chat history" : "Collapse chat history"}
+          className="h-7 w-7 shrink-0"
+          onClick={() => setCollapsed((value) => !value)}
+        >
+          {collapsed ? <PanelLeftOpen className="h-3.5 w-3.5" aria-hidden="true" /> : <PanelLeftClose className="h-3.5 w-3.5" aria-hidden="true" />}
+        </IconButton>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-sm space-y-2">
-        {loading ? (
-          <div className="rounded border border-dashed border-border-subtle px-sm py-md text-label-sm text-on-surface-variant">
-            Loading saved chats…
+      {!collapsed ? (
+        <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5 scrollbar-thin">
+          {loading ? (
+            <div className="rounded-md border border-dashed border-border-subtle/80 px-2.5 py-2.5 text-[11px] leading-5 text-on-surface-variant">
+              Loading saved chats…
+            </div>
+          ) : conversations.length === 0 ? (
+            <div className="rounded-md border border-dashed border-border-subtle/80 px-2.5 py-2.5 text-[11px] leading-5 text-on-surface-variant">
+              No saved conversations yet.
+            </div>
+          ) : (
+            conversations.map((conversation) => {
+              const selected = conversation.id === selectedConversationId;
+              return (
+                <button
+                  key={conversation.id}
+                  type="button"
+                  onClick={() => onSelectConversation(conversation)}
+                  className={cn(
+                    "w-full rounded-md border px-2.5 py-2 text-left transition-all duration-200",
+                    selected
+                      ? "border-primary/25 bg-primary/10 text-on-surface shadow-[0_0_0_1px_rgba(78,222,163,0.08)]"
+                      : "border-transparent bg-transparent hover:border-border-subtle/70 hover:bg-surface-container-low"
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[12px] font-medium leading-5">{conversation.title}</span>
+                    {conversation.updatedAt ? <span className="shrink-0 text-[10px] text-on-surface-variant">{conversation.updatedAt}</span> : null}
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-on-surface-variant">{conversation.preview}</p>
+                </button>
+              );
+            })
+          )}
+        </div>
+      ) : (
+        <div className="flex-1 px-1.5 py-2">
+          <div className="rounded-md border border-dashed border-border-subtle/80 px-1.5 py-2 text-center text-[10px] leading-4 text-on-surface-variant">
+            History
           </div>
-        ) : conversations.length === 0 ? (
-          <div className="rounded border border-dashed border-border-subtle px-sm py-md text-label-sm text-on-surface-variant">
-            No saved conversations yet.
-          </div>
-        ) : (
-          conversations.map((conversation) => {
-            const selected = conversation.id === selectedConversationId;
-            return (
-              <button
-                key={conversation.id}
-                type="button"
-                onClick={() => onSelectConversation(conversation)}
-                className={cn(
-                  "w-full rounded-lg border px-sm py-sm text-left transition-colors",
-                  selected
-                    ? "border-primary bg-primary/10 text-on-surface"
-                    : "border-transparent bg-surface-container-low hover:border-outline-variant hover:bg-surface-container-high"
-                )}
-              >
-                <div className="flex items-center justify-between gap-sm">
-                  <span className="font-label-md truncate">{conversation.title}</span>
-                  {conversation.updatedAt ? <span className="text-[10px] text-on-surface-variant">{conversation.updatedAt}</span> : null}
-                </div>
-                <p className="mt-1 line-clamp-2 text-body-sm text-on-surface-variant">{conversation.preview}</p>
-              </button>
-            );
-          })
-        )}
-      </div>
+        </div>
+      )}
     </aside>
   );
 }

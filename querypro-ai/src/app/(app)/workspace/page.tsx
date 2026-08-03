@@ -8,7 +8,6 @@ import { LoadingReveal } from "@/components/ui/LoadingReveal";
 import { WorkspaceSkeleton } from "@/components/ui/Skeleton";
 import { SchemaTree, getDefaultTable } from "@/components/schema/SchemaTree";
 import { ChatPanel } from "@/components/chat/ChatPanel";
-import { ChatHistorySidebar, type ChatConversation } from "@/components/chat/ChatHistorySidebar";
 import { SqlWorkspaceEditor } from "@/components/sql/SqlWorkspaceEditor";
 import { ResultsConsole } from "@/components/sql/ResultsConsole";
 import { useSqlStore } from "@/lib/useSqlStore";
@@ -23,7 +22,6 @@ export default function WorkspacePage() {
   const [selectedTable, setSelectedTable] = useState<SchemaTable>(getDefaultTable());
   const [sql, setSql] = useState(LIVE_SQL_SNIPPET);
   const [saving, setSaving] = useState(false);
-  const [selectedConversation, setSelectedConversation] = useState<ChatConversation | null>(null);
 
   const { isExecuting, queryResult, initDb, executeSql } = useSqlStore();
   const { showToast } = useToast();
@@ -130,16 +128,10 @@ export default function WorkspacePage() {
 
             {chatVisible ? (
               <div className="flex min-h-0 shrink-0 overflow-hidden rounded-lg border border-border-subtle bg-surface-container-lowest">
-                <ChatHistorySidebar
-                  className="hidden xl:flex"
-                  selectedConversationId={selectedConversation?.id}
-                  onSelectConversation={setSelectedConversation}
-                />
                 <ChatPanel
                   compact
-                  initialMessages={selectedConversation?.messages}
                   onRunQuery={(querySql) => runQuery(querySql)}
-                  className="w-[285px] shrink-0"
+                  className="min-w-0 w-[285px] shrink-0"
                 />
               </div>
             ) : (
